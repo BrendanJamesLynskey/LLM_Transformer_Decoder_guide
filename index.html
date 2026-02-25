@@ -635,12 +635,14 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     <a href="#overview">Overview</a>
     <a href="#tokenization">Tokenization</a>
     <a href="#embeddings">Embeddings</a>
+    <a href="#embedding-space">Embed Space</a>
     <a href="#positional">Positions</a>
     <a href="#attention">Attention</a>
     <a href="#ffn">FFN</a>
     <a href="#norm">LayerNorm</a>
     <a href="#output">Output</a>
     <a href="#generation">Generation</a>
+    <a href="#prefill-decode">Prefill/Decode</a>
     <a href="#glossary">Glossary</a>
   </div>
 </nav>
@@ -860,6 +862,112 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   </div>
 
   <p>These embedding vectors are <em>learned parameters</em> — they are initialized randomly and updated through training via backpropagation. Semantically similar tokens end up with similar vectors.</p>
+</section>
+
+<!-- ═══════════════════════════ SECTION 2B: EMBEDDING SPACE ═══════════════════════════ -->
+<section id="embedding-space">
+  <div class="section-label">Section 2b</div>
+  <h2>The Embedding Space</h2>
+
+  <p>The embedding table doesn't just assign arbitrary numbers to tokens — through training, it organizes tokens into a <strong>high-dimensional geometric space</strong> where distance and direction encode meaning. This space is the foundation everything else builds on.</p>
+
+  <h3>What the Dimensions Represent</h3>
+  <p>Each of the <span class="math">d_model</span> dimensions in an embedding vector doesn't have a single interpretable meaning. Instead, meaning is <strong>distributed</strong> across many dimensions simultaneously. A single dimension might partially encode part-of-speech, formality, topic, sentiment, and dozens of other features all at once. No one dimension is "the noun dimension" — it's the <em>pattern</em> across all dimensions that creates the representation.</p>
+
+  <div class="callout info">
+    <strong>Why so many dimensions?</strong> With <span class="math">d_model = 768</span>, each token lives in a 768-dimensional space. This high dimensionality gives the model enormous capacity to represent fine-grained distinctions. In lower dimensions, different meanings would be forced to overlap (the "curse of dimensionality" in reverse — more dimensions means more room to separate concepts).
+  </div>
+
+  <h3>Similarity = Dot Product</h3>
+  <p>The model measures how related two tokens are by computing their <strong>dot product</strong> (or equivalently, cosine similarity). If two embedding vectors point in similar directions, the model considers those tokens related. This is the same operation used later in attention (Q·K), so the geometry of embeddings directly shapes how attention flows.</p>
+
+  <div class="equation">
+    similarity(a, b) = (a · b) / (‖a‖ · ‖b‖) = cos(θ)
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">a, b</span> — two embedding vectors being compared<br>
+    <span class="math">a · b</span> — dot product: <span class="math">Σ aᵢbᵢ</span> (sum of element-wise products)<br>
+    <span class="math">‖a‖</span> — the L2 norm (magnitude) of vector a: <span class="math">√(Σ aᵢ²)</span><br>
+    <span class="math">cos(θ)</span> — the cosine of the angle between the two vectors: +1 = identical direction, 0 = orthogonal (unrelated), −1 = opposite
+  </div>
+
+  <div class="diagram-box" data-label="Embedding Space — 2D Projection">
+    <canvas id="embedding-space-canvas" width="860" height="380"></canvas>
+  </div>
+
+  <h3>Linear Substructure</h3>
+  <p>Famously, well-trained embedding spaces exhibit <strong>linear relationships</strong>: the direction from "king" to "queen" is approximately the same as the direction from "man" to "woman". These consistent offset vectors mean the model can reason by analogy — semantic relationships are encoded as geometric translations.</p>
+
+  <div class="equation">
+    W_E["king"] − W_E["man"] + W_E["woman"] ≈ W_E["queen"]
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">W_E["king"]</span> — the embedding vector for "king", looked up from the embedding table<br>
+    <span class="math">−</span> — vector subtraction (element-wise): extracts the direction from "man" to "king"<br>
+    <span class="math">+</span> — vector addition (element-wise): applies that direction starting from "woman"<br>
+    <span class="math">≈</span> — approximately equal: the resulting vector lands near "queen" in embedding space
+  </div>
+
+  <p>These relationships emerge automatically from training — the model is never told about gender or royalty. It discovers these regularities from predicting the next token across billions of training examples.</p>
+
+  <h3>The Residual Stream</h3>
+  <p>The initial embedding vector enters what's called the <strong>residual stream</strong> — a conceptual pathway that runs through the entire model. Each layer (attention, FFN) reads from this stream and <em>adds</em> to it. The embedding is never overwritten; it accumulates information as it passes through layers. By the final layer, the vector at each position has been enriched with contextual information from the entire sequence.</p>
+
+  <div class="diagram-box" data-label="Residual Stream — Information Accumulation">
+    <svg viewBox="0 0 860 200" fill="none">
+      <!-- The stream -->
+      <line x1="60" y1="100" x2="800" y2="100" stroke="#42d9c8" stroke-width="3" opacity="0.3"/>
+
+      <!-- Embedding start -->
+      <rect x="40" y="82" width="90" height="36" rx="6" fill="#1a1a28" stroke="#5b8af5" stroke-width="1.5"/>
+      <text x="85" y="105" text-anchor="middle" fill="#5b8af5" font-size="10" font-weight="500" class="mono-text">embed</text>
+      <text x="85" y="135" text-anchor="middle" fill="#555570" font-size="9" class="mono-text">"raw meaning"</text>
+
+      <!-- Layer 1 attention -->
+      <rect x="175" y="40" width="80" height="28" rx="5" fill="#1a1a28" stroke="#a78bfa" stroke-width="1"/>
+      <text x="215" y="59" text-anchor="middle" fill="#a78bfa" font-size="9" class="mono-text">attn L1</text>
+      <line x1="215" y1="68" x2="215" y2="95" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="215" y="88" text-anchor="middle" fill="#a78bfa" font-size="14">+</text>
+      <circle cx="215" cy="100" r="4" fill="#a78bfa" opacity="0.5"/>
+
+      <!-- Layer 1 FFN -->
+      <rect x="290" y="40" width="80" height="28" rx="5" fill="#1a1a28" stroke="#f59e42" stroke-width="1"/>
+      <text x="330" y="59" text-anchor="middle" fill="#f59e42" font-size="9" class="mono-text">ffn L1</text>
+      <line x1="330" y1="68" x2="330" y2="95" stroke="#f59e42" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="330" y="88" text-anchor="middle" fill="#f59e42" font-size="14">+</text>
+      <circle cx="330" cy="100" r="4" fill="#f59e42" opacity="0.5"/>
+
+      <!-- Layer 2 attention -->
+      <rect x="415" y="40" width="80" height="28" rx="5" fill="#1a1a28" stroke="#a78bfa" stroke-width="1"/>
+      <text x="455" y="59" text-anchor="middle" fill="#a78bfa" font-size="9" class="mono-text">attn L2</text>
+      <line x1="455" y1="68" x2="455" y2="95" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="455" y="88" text-anchor="middle" fill="#a78bfa" font-size="14">+</text>
+      <circle cx="455" cy="100" r="4" fill="#a78bfa" opacity="0.5"/>
+
+      <!-- Layer 2 FFN -->
+      <rect x="530" y="40" width="80" height="28" rx="5" fill="#1a1a28" stroke="#f59e42" stroke-width="1"/>
+      <text x="570" y="59" text-anchor="middle" fill="#f59e42" font-size="9" class="mono-text">ffn L2</text>
+      <line x1="570" y1="68" x2="570" y2="95" stroke="#f59e42" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="570" y="88" text-anchor="middle" fill="#f59e42" font-size="14">+</text>
+      <circle cx="570" cy="100" r="4" fill="#f59e42" opacity="0.5"/>
+
+      <!-- Dots -->
+      <text x="650" y="105" text-anchor="middle" fill="#555570" font-size="16">⋯</text>
+
+      <!-- Final -->
+      <rect x="700" y="82" width="90" height="36" rx="6" fill="#1a1a28" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="745" y="105" text-anchor="middle" fill="#f472b6" font-size="10" font-weight="500" class="mono-text">output</text>
+      <text x="745" y="135" text-anchor="middle" fill="#555570" font-size="9" class="mono-text">"rich context"</text>
+
+      <!-- Stream label -->
+      <text x="430" y="170" text-anchor="middle" fill="#42d9c8" font-size="10" class="mono-text">residual stream — the vector is enriched at each layer, never overwritten</text>
+      <text x="430" y="188" text-anchor="middle" fill="#555570" font-size="9">each + is a residual connection: stream = stream + sub_layer(stream)</text>
+    </svg>
+  </div>
 </section>
 
 <!-- ═══════════════════════════ SECTION 3: POSITIONAL ENCODING ═══════════════════════════ -->
@@ -1403,9 +1511,290 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   </div>
 </section>
 
-<!-- ═══════════════════════════════════════════ SECTION 9: GLOSSARY ═══════════════════════════════════════════ -->
+<!-- ═══════════════════════════ SECTION 9: PREFILL / DECODE ═══════════════════════════ -->
+<section id="prefill-decode">
+  <div class="section-label">Section 9</div>
+  <h2>Prefill vs. Decode: The Two Phases of Inference</h2>
+
+  <p>When you send a prompt to an LLM and it starts generating, the inference engine doesn't process every token the same way. The computation splits into two fundamentally different phases with very different performance characteristics.</p>
+
+  <div class="diagram-box" data-label="Two-Phase Inference Pipeline">
+    <svg viewBox="0 0 860 340" fill="none">
+      <!-- Phase 1: Prefill -->
+      <rect x="30" y="30" width="390" height="280" rx="10" fill="rgba(91,138,245,0.04)" stroke="#5b8af5" stroke-width="1.5"/>
+      <text x="225" y="58" text-anchor="middle" fill="#5b8af5" font-size="15" font-weight="600">Phase 1: Prefill</text>
+      <text x="225" y="78" text-anchor="middle" fill="#8887a0" font-size="11">(also called "prompt processing" or "context encoding")</text>
+
+      <!-- Prompt tokens row -->
+      <g transform="translate(55, 95)">
+        <rect width="42" height="26" rx="4" fill="#1a1a28" stroke="#5b8af5" stroke-width="1"/>
+        <text x="21" y="18" text-anchor="middle" fill="#5b8af5" font-size="9" class="mono-text">The</text>
+        <rect x="48" width="42" height="26" rx="4" fill="#1a1a28" stroke="#5b8af5" stroke-width="1"/>
+        <text x="69" y="18" text-anchor="middle" fill="#5b8af5" font-size="9" class="mono-text">cat</text>
+        <rect x="96" width="42" height="26" rx="4" fill="#1a1a28" stroke="#5b8af5" stroke-width="1"/>
+        <text x="117" y="18" text-anchor="middle" fill="#5b8af5" font-size="9" class="mono-text">sat</text>
+        <rect x="144" width="42" height="26" rx="4" fill="#1a1a28" stroke="#5b8af5" stroke-width="1"/>
+        <text x="165" y="18" text-anchor="middle" fill="#5b8af5" font-size="9" class="mono-text">on</text>
+        <rect x="192" width="42" height="26" rx="4" fill="#1a1a28" stroke="#5b8af5" stroke-width="1"/>
+        <text x="213" y="18" text-anchor="middle" fill="#5b8af5" font-size="9" class="mono-text">the</text>
+        <rect x="240" width="42" height="26" rx="4" fill="#1a1a28" stroke="#5b8af5" stroke-width="1"/>
+        <text x="261" y="18" text-anchor="middle" fill="#5b8af5" font-size="9" class="mono-text">...</text>
+      </g>
+      <text x="225" y="142" text-anchor="middle" fill="#5b8af5" font-size="10" class="mono-text">all prompt tokens processed in parallel</text>
+
+      <!-- Arrow -->
+      <line x1="225" y1="150" x2="225" y2="170" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Model block -->
+      <rect x="105" y="175" width="240" height="34" rx="6" fill="#1a1a28" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="225" y="197" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="500">Full Transformer Forward Pass</text>
+
+      <!-- Arrow -->
+      <line x1="225" y1="209" x2="225" y2="228" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- KV Cache output -->
+      <rect x="80" y="232" width="290" height="34" rx="6" fill="#1a1a28" stroke="#42d9c8" stroke-width="1.5"/>
+      <text x="225" y="254" text-anchor="middle" fill="#42d9c8" font-size="11" font-weight="500">KV Cache populated for all positions</text>
+
+      <!-- Bullet points -->
+      <text x="55" y="290" fill="#8887a0" font-size="9" class="mono-text">✓ Compute-bound (matrix multiplies)</text>
+      <text x="55" y="303" fill="#8887a0" font-size="9" class="mono-text">✓ High GPU utilization (large batches)</text>
+
+      <!-- Phase 2: Decode -->
+      <rect x="440" y="30" width="390" height="280" rx="10" fill="rgba(66,217,200,0.04)" stroke="#42d9c8" stroke-width="1.5"/>
+      <text x="635" y="58" text-anchor="middle" fill="#42d9c8" font-size="15" font-weight="600">Phase 2: Decode</text>
+      <text x="635" y="78" text-anchor="middle" fill="#8887a0" font-size="11">(also called "autoregressive generation")</text>
+
+      <!-- Single token -->
+      <g transform="translate(610, 95)">
+        <rect width="50" height="26" rx="4" fill="#1a1a28" stroke="#42d9c8" stroke-width="1.5"/>
+        <text x="25" y="18" text-anchor="middle" fill="#42d9c8" font-size="9" class="mono-text">mat</text>
+      </g>
+      <text x="635" y="142" text-anchor="middle" fill="#42d9c8" font-size="10" class="mono-text">one new token at a time</text>
+
+      <!-- Arrow -->
+      <line x1="635" y1="150" x2="635" y2="170" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Model block with cache -->
+      <rect x="495" y="175" width="140" height="34" rx="6" fill="#1a1a28" stroke="#a78bfa" stroke-width="1.2"/>
+      <text x="565" y="197" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="500">Transformer</text>
+      <rect x="645" y="175" width="120" height="34" rx="6" fill="#1a1a28" stroke="#42d9c8" stroke-width="1.2"/>
+      <text x="705" y="197" text-anchor="middle" fill="#42d9c8" font-size="10" font-weight="500">+ KV Cache</text>
+
+      <!-- Arrow -->
+      <line x1="635" y1="209" x2="635" y2="228" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Output token -->
+      <rect x="580" y="232" width="110" height="34" rx="6" fill="#1a1a28" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="635" y="254" text-anchor="middle" fill="#f472b6" font-size="11" font-weight="500">→ next token</text>
+
+      <!-- Loop arrow -->
+      <path d="M690 249 Q750 249 750 200 Q750 155 690 155" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" fill="none" marker-end="url(#arrowPink)"/>
+      <text x="770" y="205" fill="#f472b6" font-size="8" class="mono-text">feed back</text>
+
+      <!-- Bullet points -->
+      <text x="465" y="290" fill="#8887a0" font-size="9" class="mono-text">✓ Memory-bound (reading KV cache)</text>
+      <text x="465" y="303" fill="#8887a0" font-size="9" class="mono-text">✓ Low GPU utilization (tiny batches)</text>
+
+      <defs>
+        <marker id="arrowPink" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+          <path d="M0,0 L6,2.5 L0,5" fill="#f472b6"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <h3>Phase 1: Prefill (Prompt Processing)</h3>
+  <p>When you send a prompt — say, 500 tokens — the model processes <strong>all of them at once</strong> in a single forward pass. This is possible because attention between prompt tokens doesn't depend on generation order; we already have all the tokens. The causal mask still applies (token 300 can't attend to token 301), but the computation for all positions happens simultaneously via matrix multiplication.</p>
+
+  <p>During prefill, the model computes Q, K, V for every prompt token, runs attention, runs the FFN, and — critically — <strong>stores all K and V vectors into the KV cache</strong>. This is the expensive setup step.</p>
+
+  <div class="callout info">
+    <strong>Prefill is compute-bound.</strong> The main bottleneck is the raw arithmetic of matrix multiplications. GPUs are excellent at this — you're multiplying large matrices, and the compute units stay busy. Prefill throughput is measured in <strong>tokens per second</strong> and scales well with batch size.
+  </div>
+
+  <h3>The Transition</h3>
+  <p>Prefill produces two things: (1) the KV cache containing K and V for all prompt positions across all layers, and (2) the logits for the last prompt token, from which the first generated token is sampled. From this point, the system switches to decode mode.</p>
+
+  <h3>Phase 2: Decode (Token Generation)</h3>
+  <p>Now the model generates tokens one at a time. For each new token, the forward pass is much smaller:</p>
+
+  <div class="diagram-box" data-label="Single Decode Step — What Actually Happens">
+    <svg viewBox="0 0 860 280" fill="none">
+      <!-- Step sequence -->
+      <text x="30" y="25" fill="#42d9c8" font-size="12" font-weight="600" class="mono-text">For each new token generated:</text>
+
+      <!-- Step 1 -->
+      <rect x="30" y="45" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="62" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">1</text>
+      <text x="64" y="62" fill="#e0dfe6" font-size="11">Embed the single new token → 1 vector of shape <tspan fill="#a78bfa" class="mono-text">[1 × d]</tspan></text>
+
+      <!-- Step 2 -->
+      <rect x="30" y="80" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="97" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">2</text>
+      <text x="64" y="97" fill="#e0dfe6" font-size="11">Compute Q, K, V for just this one position → <tspan fill="#a78bfa" class="mono-text">[1 × d_k]</tspan> each</text>
+
+      <!-- Step 3 -->
+      <rect x="30" y="115" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="132" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">3</text>
+      <text x="64" y="132" fill="#e0dfe6" font-size="11">Append new K, V to the KV cache → cache grows by 1 row</text>
+
+      <!-- Step 4 -->
+      <rect x="30" y="150" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="167" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">4</text>
+      <text x="64" y="167" fill="#e0dfe6" font-size="11">Compute attention: new Q against <tspan fill="#f59e42">entire cached K</tspan> → <tspan fill="#a78bfa" class="mono-text">[1 × (n+t)]</tspan> scores</text>
+
+      <!-- Step 5 -->
+      <rect x="30" y="185" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="202" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">5</text>
+      <text x="64" y="202" fill="#e0dfe6" font-size="11">Weighted sum of <tspan fill="#f59e42">entire cached V</tspan> using those attention weights</text>
+
+      <!-- Step 6 -->
+      <rect x="30" y="220" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="237" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">6</text>
+      <text x="64" y="237" fill="#e0dfe6" font-size="11">Run through FFN, project to logits, sample → <tspan fill="#f472b6">1 new token</tspan></text>
+
+      <!-- Step 7 -->
+      <rect x="30" y="255" width="24" height="24" rx="12" fill="#5b8af5"/>
+      <text x="42" y="272" text-anchor="middle" fill="#0a0a0f" font-size="11" font-weight="700">7</text>
+      <text x="64" y="272" fill="#e0dfe6" font-size="11">Feed that token back as input → repeat from step 1</text>
+    </svg>
+  </div>
+
+  <div class="callout">
+    <strong>Decode is memory-bound.</strong> The arithmetic is tiny (one token's worth of matrix multiplies), but you must <em>read the entire KV cache from GPU memory</em> at every step. For a 7B model with 8K context, the KV cache can be several gigabytes. The GPU spends most of its time <em>loading data</em>, not computing. This is why generating 100 tokens takes much longer than processing 100 prompt tokens.
+  </div>
+
+  <h3>Performance Characteristics</h3>
+
+  <div class="diagram-box" data-label="Prefill vs Decode — Performance Comparison">
+    <svg viewBox="0 0 860 320" fill="none">
+      <!-- Headers -->
+      <text x="280" y="30" text-anchor="middle" fill="#5b8af5" font-size="13" font-weight="600">Prefill</text>
+      <text x="580" y="30" text-anchor="middle" fill="#42d9c8" font-size="13" font-weight="600">Decode</text>
+      <line x1="430" y1="15" x2="430" y2="310" stroke="#2a2a3a" stroke-width="1"/>
+
+      <!-- Row labels and content -->
+      <text x="30" y="65" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">BOTTLENECK</text>
+      <text x="280" y="65" text-anchor="middle" fill="#5b8af5" font-size="11">Compute (FLOPS)</text>
+      <text x="580" y="65" text-anchor="middle" fill="#42d9c8" font-size="11">Memory bandwidth (GB/s)</text>
+      <line x1="30" y1="78" x2="830" y2="78" stroke="#1e1e2a" stroke-width="1"/>
+
+      <text x="30" y="105" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">TOKENS/STEP</text>
+      <text x="280" y="105" text-anchor="middle" fill="#5b8af5" font-size="11">All prompt tokens (hundreds/thousands)</text>
+      <text x="580" y="105" text-anchor="middle" fill="#42d9c8" font-size="11">1 token</text>
+      <line x1="30" y1="118" x2="830" y2="118" stroke="#1e1e2a" stroke-width="1"/>
+
+      <text x="30" y="145" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">MATRIX SIZES</text>
+      <text x="280" y="145" text-anchor="middle" fill="#5b8af5" font-size="11">[n × d] × [d × d] — large, efficient</text>
+      <text x="580" y="145" text-anchor="middle" fill="#42d9c8" font-size="11">[1 × d] × [d × d] — thin, inefficient</text>
+      <line x1="30" y1="158" x2="830" y2="158" stroke="#1e1e2a" stroke-width="1"/>
+
+      <text x="30" y="185" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">GPU UTIL</text>
+      <rect x="180" y="174" width="200" height="14" rx="3" fill="#0d0d14" stroke="#1e1e2a" stroke-width="1"/>
+      <rect x="182" y="176" width="170" height="10" rx="2" fill="#5b8af5" opacity="0.5"/>
+      <text x="395" y="186" fill="#5b8af5" font-size="9" class="mono-text">~85%</text>
+
+      <rect x="480" y="174" width="200" height="14" rx="3" fill="#0d0d14" stroke="#1e1e2a" stroke-width="1"/>
+      <rect x="482" y="176" width="30" height="10" rx="2" fill="#42d9c8" opacity="0.5"/>
+      <text x="695" y="186" fill="#42d9c8" font-size="9" class="mono-text">~5-15%</text>
+      <line x1="30" y1="198" x2="830" y2="198" stroke="#1e1e2a" stroke-width="1"/>
+
+      <text x="30" y="225" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">LATENCY FEEL</text>
+      <text x="280" y="225" text-anchor="middle" fill="#5b8af5" font-size="11">"Time to first token" (TTFT)</text>
+      <text x="580" y="225" text-anchor="middle" fill="#42d9c8" font-size="11">"Tokens per second" (TPS)</text>
+      <line x1="30" y1="238" x2="830" y2="238" stroke="#1e1e2a" stroke-width="1"/>
+
+      <text x="30" y="265" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">KV CACHE</text>
+      <text x="280" y="265" text-anchor="middle" fill="#5b8af5" font-size="11">Writing cache (building it up)</text>
+      <text x="580" y="265" text-anchor="middle" fill="#42d9c8" font-size="11">Reading cache (grows each step)</text>
+      <line x1="30" y1="278" x2="830" y2="278" stroke="#1e1e2a" stroke-width="1"/>
+
+      <text x="30" y="305" fill="#8887a0" font-size="10" font-weight="600" class="mono-text">OPTIMIZATION</text>
+      <text x="280" y="305" text-anchor="middle" fill="#5b8af5" font-size="11">Chunked prefill, Flash Attention</text>
+      <text x="580" y="305" text-anchor="middle" fill="#42d9c8" font-size="11">Continuous batching, speculative decode</text>
+    </svg>
+  </div>
+
+  <h3>Why This Matters</h3>
+  <p>The prefill/decode split has major implications for how inference systems are designed:</p>
+
+  <p><strong>Time to First Token (TTFT)</strong> is dominated by prefill. A long prompt means a longer wait before the model starts responding. This is why you see a pause before text starts streaming — the system is crunching through your entire prompt in parallel.</p>
+
+  <p><strong>Tokens Per Second (TPS)</strong> is determined by decode speed. Each generated token requires reading the entire KV cache, so generation speed degrades as the output gets longer and the cache grows. A 4K-token response is slower per-token at the end than at the beginning.</p>
+
+  <div class="callout info">
+    <strong>Practical example:</strong> You send a 2,000-token prompt to a 70B model. Prefill processes all 2,000 tokens in ~0.8 seconds (parallel matrix multiply). Then decode generates at ~30 tokens/second (sequential, memory-bound). A 200-token response takes ~6.7 additional seconds. The user waits 0.8s for the first token, then sees text stream for ~6.7s.
+  </div>
+
+  <h3>Optimizations for Each Phase</h3>
+
+  <p><strong>For prefill:</strong> <em>Flash Attention</em> fuses the Q·K, mask, softmax, and ×V operations into a single GPU kernel, avoiding materializing the full n×n attention matrix in memory. <em>Chunked prefill</em> splits very long prompts into chunks to limit peak memory. <em>Tensor parallelism</em> splits weight matrices across GPUs.</p>
+
+  <p><strong>For decode:</strong> <em>Continuous batching</em> groups decode steps from multiple requests to improve GPU utilization (instead of wasting capacity on a [1×d] multiply, batch 64 users' single-token decodes into a [64×d] multiply). <em>Speculative decoding</em> uses a small "draft" model to predict several tokens ahead, then verifies them in parallel with the big model — if the guesses are right (they often are), you get multiple tokens for the cost of one step. <em>GQA/MQA</em> (Grouped/Multi-Query Attention) reduce KV cache size by sharing keys and values across heads.</p>
+
+  <div class="diagram-box" data-label="Speculative Decoding — Concept">
+    <svg viewBox="0 0 860 180" fill="none">
+      <!-- Draft model -->
+      <text x="30" y="30" fill="#f59e42" font-size="11" font-weight="600" class="mono-text">Small draft model (fast, approximate):</text>
+      <g transform="translate(30, 42)">
+        <rect width="70" height="26" rx="4" fill="#1a1a28" stroke="#f59e42" stroke-width="1"/>
+        <text x="35" y="18" text-anchor="middle" fill="#f59e42" font-size="9" class="mono-text">the ✓</text>
+        <rect x="76" width="70" height="26" rx="4" fill="#1a1a28" stroke="#f59e42" stroke-width="1"/>
+        <text x="111" y="18" text-anchor="middle" fill="#f59e42" font-size="9" class="mono-text">fluffy ✓</text>
+        <rect x="152" width="70" height="26" rx="4" fill="#1a1a28" stroke="#f59e42" stroke-width="1"/>
+        <text x="187" y="18" text-anchor="middle" fill="#f59e42" font-size="9" class="mono-text">cat ✓</text>
+        <rect x="228" width="70" height="26" rx="4" fill="#1a1a28" stroke="#f87171" stroke-width="1"/>
+        <text x="263" y="18" text-anchor="middle" fill="#f87171" font-size="9" class="mono-text">jumped ✗</text>
+        <text x="320" y="18" fill="#8887a0" font-size="9">← guesses 4 tokens ahead</text>
+      </g>
+
+      <!-- Verify -->
+      <text x="30" y="100" fill="#a78bfa" font-size="11" font-weight="600" class="mono-text">Big model (verifies all 4 in parallel):</text>
+      <g transform="translate(30, 112)">
+        <rect width="70" height="26" rx="4" fill="rgba(66,217,200,0.1)" stroke="#42d9c8" stroke-width="1"/>
+        <text x="35" y="18" text-anchor="middle" fill="#42d9c8" font-size="9" class="mono-text">the ✓</text>
+        <rect x="76" width="70" height="26" rx="4" fill="rgba(66,217,200,0.1)" stroke="#42d9c8" stroke-width="1"/>
+        <text x="111" y="18" text-anchor="middle" fill="#42d9c8" font-size="9" class="mono-text">fluffy ✓</text>
+        <rect x="152" width="70" height="26" rx="4" fill="rgba(66,217,200,0.1)" stroke="#42d9c8" stroke-width="1"/>
+        <text x="187" y="18" text-anchor="middle" fill="#42d9c8" font-size="9" class="mono-text">cat ✓</text>
+        <rect x="228" width="70" height="26" rx="4" fill="rgba(248,113,113,0.1)" stroke="#f87171" stroke-width="1"/>
+        <text x="263" y="18" text-anchor="middle" fill="#f87171" font-size="9" class="mono-text">sat ✓</text>
+        <text x="320" y="18" fill="#8887a0" font-size="9">← accepts 3, corrects 4th → 4 tokens in 1 step!</text>
+      </g>
+
+      <!-- Result -->
+      <text x="30" y="168" fill="#42d9c8" font-size="10" class="mono-text">Result: generated "the fluffy cat sat" in 1 decode step instead of 4</text>
+    </svg>
+  </div>
+
+  <h3>Chunked Prefill</h3>
+  <p>For very long prompts (e.g. 100K tokens), the full n×n attention matrix won't fit in GPU memory. <em>Chunked prefill</em> processes the prompt in chunks (say, 8K tokens at a time), building the KV cache incrementally. Each chunk attends to all prior cached tokens plus itself. This bounds peak memory at the cost of slightly more compute.</p>
+
+  <h3>KV Cache Memory Revisited</h3>
+  <p>The KV cache is often the limiting factor for maximum context length and batch size. Its memory grows linearly with sequence length, number of layers, and model dimension:</p>
+
+  <div class="equation">
+    KV_memory = 2 × N × n × d_model × bytes_per_param
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">2</span> — one set for Keys, one for Values<br>
+    <span class="math">N</span> — number of decoder layers (each layer has its own KV cache)<br>
+    <span class="math">n</span> — current sequence length (prompt + generated tokens so far)<br>
+    <span class="math">d_model</span> — model hidden dimension (or <span class="math">d_k × h</span> for all heads combined)<br>
+    <span class="math">bytes_per_param</span> — 2 for FP16/BF16, 1 for INT8, 0.5 for INT4 quantized cache
+  </div>
+
+  <div class="callout">
+    <strong>Concrete numbers:</strong> A 70B model (N=80, d=8192) serving an 8K context in FP16 uses <span class="math">2 × 80 × 8192 × 8192 × 2</span> = <strong>~20 GB per request</strong> just for the KV cache. This is why quantized KV caches (INT8, INT4) and techniques like GQA (which reduce the number of unique K/V heads) are critical for production deployment.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SECTION 10: GLOSSARY ═══════════════════════════════════════════ -->
 <section id="glossary">
-  <div class="section-label">Reference</div>
+  <div class="section-label">Section 10 — Reference</div>
   <h2>Glossary</h2>
   <p>Quick-reference for every term and symbol used in this guide.</p>
 
@@ -1609,6 +1998,86 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
         <div class="glossary-entry">
           <dt>Autoregressive</dt>
           <dd>Generating one token at a time, feeding each new token back as input to predict the next. The causal mask ensures the model never "sees the future".</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Embedding Space</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Embedding Space</dt>
+          <dd>The high-dimensional geometric space in which token embedding vectors live. Distances and directions in this space encode semantic relationships between tokens.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Cosine Similarity</dt>
+          <dd>A measure of similarity between two vectors based on the cosine of the angle between them: <span class="math">cos(θ) = (a · b) / (‖a‖ · ‖b‖)</span>. Ranges from −1 (opposite) to +1 (identical direction). Used to compare token embeddings.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Dot Product</dt>
+          <dd>The sum of element-wise products of two vectors: <span class="math">a · b = Σ aᵢbᵢ</span>. Measures both similarity of direction and magnitude. The core operation in attention score computation.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Linear Substructure</dt>
+          <dd>The phenomenon where semantic relationships are encoded as consistent vector offsets (e.g., king − man + woman ≈ queen). Emerges from training, not explicit programming.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Residual Stream</dt>
+          <dd>A conceptual view of the model's hidden state as a continuous pathway. Each sub-layer (attention, FFN) reads from and adds to this stream via residual connections. The representation is enriched incrementally, never overwritten.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Distributed Representation</dt>
+          <dd>Meaning is spread across many dimensions simultaneously — no single dimension encodes one concept. A token's semantics arise from the <em>pattern</em> across all dimensions together.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Inference: Prefill & Decode</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Prefill</dt>
+          <dd>The first phase of inference where all prompt tokens are processed in parallel in a single forward pass. Builds the KV cache. Compute-bound (limited by FLOPS). Determines Time to First Token (TTFT).</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Decode</dt>
+          <dd>The second phase where tokens are generated one at a time autoregressively. Each step reads the full KV cache. Memory-bandwidth-bound. Determines Tokens Per Second (TPS).</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>TTFT (Time to First Token)</dt>
+          <dd>The latency from sending a request to receiving the first generated token. Dominated by the prefill phase — longer prompts mean higher TTFT.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>TPS (Tokens Per Second)</dt>
+          <dd>The rate at which tokens are generated during the decode phase. Determined by how fast the system can read the KV cache and run one token through the model.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Compute-Bound</dt>
+          <dd>A workload limited by arithmetic throughput (FLOPS). The GPU's compute units are the bottleneck. Prefill is compute-bound because it involves large matrix multiplications.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Memory-Bound</dt>
+          <dd>A workload limited by memory read/write bandwidth (GB/s). The GPU spends more time loading data than computing. Decode is memory-bound because it must read the entire KV cache for each tiny single-token computation.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Flash Attention</dt>
+          <dd>An optimized attention implementation that fuses Q·K, mask, softmax, and ×V into a single GPU kernel, avoiding materialization of the full n×n attention matrix. Reduces memory from O(n²) to O(n).</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Continuous Batching</dt>
+          <dd>A serving optimization that dynamically groups decode steps from multiple user requests into a single batch, improving GPU utilization during the memory-bound decode phase.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Speculative Decoding</dt>
+          <dd>An optimization where a small "draft" model guesses several tokens ahead, which the large model then verifies in parallel. Accepted guesses yield multiple tokens per decode step.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Chunked Prefill</dt>
+          <dd>Processing a long prompt in smaller chunks to bound peak memory usage. Each chunk builds its portion of the KV cache while attending to all previously cached tokens.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>GQA (Grouped-Query Attention)</dt>
+          <dd>A variant where multiple query heads share the same K/V head, reducing KV cache size (e.g. 32 query heads sharing 8 KV heads = 4× reduction). Used by LLaMA 2 70B, Mistral, and others.</dd>
         </div>
       </dl>
     </div>
@@ -1894,6 +2363,147 @@ function regenerateAttention() {
 
 generateScores();
 renderMaskGrids();
+
+// ═══════════════════════════════════════════════
+// EMBEDDING SPACE CANVAS
+// ═══════════════════════════════════════════════
+(function() {
+  const canvas = document.getElementById('embedding-space-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  // Simulated 2D projections of token embeddings (t-SNE/PCA-like)
+  const clusters = [
+    { label: 'Animals', color: '#5b8af5', tokens: [
+      { t: 'cat', x: 220, y: 130 }, { t: 'dog', x: 245, y: 155 }, { t: 'fish', x: 200, y: 160 },
+      { t: 'bird', x: 260, y: 125 }, { t: 'kitten', x: 215, y: 145 }, { t: 'puppy', x: 250, y: 140 },
+    ]},
+    { label: 'Colors', color: '#f472b6', tokens: [
+      { t: 'red', x: 550, y: 90 }, { t: 'blue', x: 580, y: 110 }, { t: 'green', x: 560, y: 130 },
+      { t: 'yellow', x: 530, y: 115 }, { t: 'purple', x: 595, y: 95 },
+    ]},
+    { label: 'Actions', color: '#42d9c8', tokens: [
+      { t: 'run', x: 400, y: 260 }, { t: 'walk', x: 380, y: 280 }, { t: 'jump', x: 420, y: 245 },
+      { t: 'sit', x: 370, y: 265 }, { t: 'swim', x: 440, y: 275 }, { t: 'climb', x: 430, y: 255 },
+    ]},
+    { label: 'Numbers', color: '#f59e42', tokens: [
+      { t: 'one', x: 680, y: 240 }, { t: 'two', x: 700, y: 260 }, { t: 'three', x: 720, y: 245 },
+      { t: 'four', x: 695, y: 225 }, { t: 'five', x: 740, y: 255 },
+    ]},
+    { label: 'Function words', color: '#8887a0', tokens: [
+      { t: 'the', x: 110, y: 290 }, { t: 'a', x: 130, y: 310 }, { t: 'is', x: 150, y: 285 },
+      { t: 'of', x: 95, y: 305 }, { t: 'in', x: 140, y: 300 }, { t: 'and', x: 115, y: 270 },
+    ]},
+  ];
+
+  // Background dots (other vocab items)
+  ctx.fillStyle = '#1a1a28';
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * W;
+    const y = 40 + Math.random() * (H - 70);
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Draw clusters
+  clusters.forEach(c => {
+    // Cluster hull (rough circle)
+    const cx = c.tokens.reduce((s, t) => s + t.x, 0) / c.tokens.length;
+    const cy = c.tokens.reduce((s, t) => s + t.y, 0) / c.tokens.length;
+    const maxR = Math.max(...c.tokens.map(t => Math.sqrt((t.x - cx) ** 2 + (t.y - cy) ** 2))) + 30;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+    ctx.strokeStyle = c.color + '25';
+    ctx.fillStyle = c.color + '06';
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+
+    // Cluster label
+    ctx.fillStyle = c.color + '90';
+    ctx.font = 'italic 10px "DM Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(c.label, cx, cy - maxR - 6);
+
+    // Tokens
+    c.tokens.forEach(tok => {
+      ctx.beginPath();
+      ctx.arc(tok.x, tok.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = c.color;
+      ctx.fill();
+
+      ctx.fillStyle = c.color;
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(tok.t, tok.x + 7, tok.y + 4);
+    });
+  });
+
+  // Draw analogy arrow: cat → kitten ≈ dog → puppy
+  const drawAnalogy = (from, to, color, dashed) => {
+    ctx.beginPath();
+    ctx.setLineDash(dashed ? [4, 3] : []);
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.strokeStyle = color + '60';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Arrowhead
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - 8 * Math.cos(angle - 0.4), to.y - 8 * Math.sin(angle - 0.4));
+    ctx.lineTo(to.x - 8 * Math.cos(angle + 0.4), to.y - 8 * Math.sin(angle + 0.4));
+    ctx.closePath();
+    ctx.fillStyle = color + '60';
+    ctx.fill();
+  };
+
+  const cat = clusters[0].tokens[0], kitten = clusters[0].tokens[4];
+  const dog = clusters[0].tokens[1], puppy = clusters[0].tokens[5];
+  drawAnalogy(cat, kitten, '#f59e42', false);
+  drawAnalogy(dog, puppy, '#f59e42', true);
+
+  // Analogy label
+  ctx.fillStyle = '#f59e42';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('cat→kitten ≈ dog→puppy', 265, 165);
+  ctx.fillText('(same direction = same relationship)', 265, 178);
+
+  // Title
+  ctx.fillStyle = '#555570';
+  ctx.font = 'italic 11px "DM Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('2D projection of a high-dimensional embedding space — semantically similar tokens cluster together', W / 2, 18);
+
+  // Axes
+  ctx.strokeStyle = '#1e1e2a';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(40, H - 30);
+  ctx.lineTo(W - 20, H - 30);
+  ctx.moveTo(40, H - 30);
+  ctx.lineTo(40, 30);
+  ctx.stroke();
+  ctx.fillStyle = '#333';
+  ctx.font = '9px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('dimension 1 (projected)', W / 2, H - 12);
+  ctx.save();
+  ctx.translate(15, H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('dimension 2 (projected)', 0, 0);
+  ctx.restore();
+})();
 
 // ═══════════════════════════════════════════════
 // GELU CANVAS
