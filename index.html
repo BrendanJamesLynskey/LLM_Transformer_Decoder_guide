@@ -1085,6 +1085,17 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     LayerNorm(x) = γ ⊙ ((x − μ) / √(σ² + ε)) + β
   </div>
 
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x</span> — the input vector (one token's hidden state, dimension <span class="math">d_model</span>)<br>
+    <span class="math">μ</span> (mu) — the mean of all elements in <span class="math">x</span>: &nbsp;<span class="math">μ = (1/d) Σ xᵢ</span><br>
+    <span class="math">σ²</span> (sigma squared) — the variance of all elements in <span class="math">x</span>: &nbsp;<span class="math">σ² = (1/d) Σ (xᵢ − μ)²</span><br>
+    <span class="math">ε</span> (epsilon) — a tiny constant (e.g. 10⁻⁵) added inside the square root to prevent division by zero<br>
+    <span class="math">γ</span> (gamma) — a learned per-dimension scale vector of size <span class="math">d</span>, initialized to ones<br>
+    <span class="math">β</span> (beta) — a learned per-dimension shift (bias) vector of size <span class="math">d</span>, initialized to zeros<br>
+    <span class="math">⊙</span> — element-wise (Hadamard) multiplication: each dimension is scaled independently by its corresponding <span class="math">γ</span> value
+  </div>
+
   <p>Where <span class="math">μ</span> and <span class="math">σ²</span> are the mean and variance computed across the <span class="math">d_model</span> dimensions of that single token, <span class="math">γ</span> and <span class="math">β</span> are learned scale and shift parameters (each of size <span class="math">d</span>), and <span class="math">ε</span> is a small constant (e.g., 10⁻⁵) for numerical stability.</p>
 
   <div class="diagram-box" data-label="LayerNorm — Step by Step">
