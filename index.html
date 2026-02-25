@@ -204,20 +204,28 @@ p { margin-bottom: 1.25rem; }
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 2rem;
+  padding-top: 2.5rem;
   margin: 2rem 0;
   overflow-x: auto;
   position: relative;
 }
 .diagram-box::before {
   content: attr(data-label);
-  position: absolute; top: -10px; left: 20px;
-  background: var(--bg);
-  padding: 0 0.75rem;
+  position: sticky;
+  left: 0;
+  display: block;
+  margin-top: -2.5rem;
+  margin-bottom: 1.25rem;
+  padding: 0.5rem 0 0.25rem;
+  background: var(--bg-card);
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--text-dim);
+  color: var(--accent-cyan);
+  border-bottom: 1px solid var(--border);
+  z-index: 2;
 }
 
 /* SVG DIAGRAMS */
@@ -559,6 +567,63 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
 }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+/* GLOSSARY */
+.glossary-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+.glossary-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.75rem 2rem;
+}
+.glossary-group-title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-cyan);
+  margin: 0 0 1.25rem 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.glossary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.glossary-entry {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.25rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(30,30,42,0.5);
+  align-items: baseline;
+}
+.glossary-entry:last-child { border-bottom: none; }
+.glossary-entry dt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-bright);
+  line-height: 1.6;
+}
+.glossary-entry dd {
+  font-size: 0.92rem;
+  color: var(--text);
+  line-height: 1.7;
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .glossary-entry {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+  .glossary-group { padding: 1.25rem; }
+}
 </style>
 </head>
 <body>
@@ -576,6 +641,7 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     <a href="#norm">LayerNorm</a>
     <a href="#output">Output</a>
     <a href="#generation">Generation</a>
+    <a href="#glossary">Glossary</a>
   </div>
 </nav>
 
@@ -1196,6 +1262,241 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
 
   <div class="diagram-box" data-label="Where the Parameters Live">
     <div id="param-chart"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SECTION 9: GLOSSARY ═══════════════════════════════════════════ -->
+<section id="glossary">
+  <div class="section-label">Reference</div>
+  <h2>Glossary</h2>
+  <p>Quick-reference for every term and symbol used in this guide.</p>
+
+  <div class="glossary-grid">
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Core Dimensions & Notation</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt><span class="math">d_model</span> (or <span class="math">d</span>)</dt>
+          <dd>The hidden dimension of the model — the width of every token's representation vector as it flows through the network. Typical values: 768 (GPT-2 small), 4096 (LLaMA-7B), 12288 (GPT-3 175B).</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">n</span></dt>
+          <dd>Sequence length — the number of tokens currently in the context window. Bounded by the model's maximum context length (e.g. 2048, 4096, 128K).</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">V</span></dt>
+          <dd>Vocabulary size — the total number of unique tokens the model knows. Typically 32K–128K for modern models.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">N</span></dt>
+          <dd>Number of decoder layers (blocks) stacked in the model. Ranges from 12 (small) to 96+ (large).</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">h</span></dt>
+          <dd>Number of attention heads per layer. Each head operates on a sub-dimension <span class="math">d_k = d_model / h</span>.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">d_k</span></dt>
+          <dd>Head dimension — the dimensionality each attention head works in. Equal to <span class="math">d_model / h</span>. Typically 64 or 128.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">d_ff</span></dt>
+          <dd>Feed-forward intermediate dimension. Usually <span class="math">4 × d_model</span> in standard FFN, or <span class="math">~2.67 × d_model</span> with SwiGLU (to match parameter count).</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Tokenization</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Token</dt>
+          <dd>The atomic unit the model processes — a subword, word, or character fragment. Text is split into tokens before being fed to the model.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>BPE (Byte-Pair Encoding)</dt>
+          <dd>A tokenization algorithm that builds a vocabulary by iteratively merging the most frequent adjacent byte/character pairs. Used by GPT, LLaMA, and most modern LLMs.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Token ID</dt>
+          <dd>An integer index (0 to V−1) that uniquely identifies a token in the vocabulary. The model only ever sees these integers, not text.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>EOS Token</dt>
+          <dd>End-of-Sequence token — a special token ID signaling the model to stop generating. When sampled, the autoregressive loop terminates.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Embeddings & Positions</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Embedding (<span class="math">W_E</span>)</dt>
+          <dd>A learned lookup table of shape <span class="math">V × d_model</span>. Each row is a dense vector representing one token. Converts discrete token IDs into continuous vectors.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Positional Encoding</dt>
+          <dd>A mechanism to inject token ordering information. Without it, attention is permutation-invariant and cannot distinguish "cat sat" from "sat cat".</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>RoPE (Rotary Position Embedding)</dt>
+          <dd>A positional encoding method that rotates Q and K vectors by position-dependent angles. Encodes <em>relative</em> positions, enabling better length generalization than absolute embeddings.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Weight Tying</dt>
+          <dd>Reusing the embedding matrix <span class="math">W_E</span> as the output unembedding matrix (transposed). Reduces parameters and often improves performance.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Attention</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Self-Attention</dt>
+          <dd>A mechanism where each token computes a weighted sum of all other tokens' representations. The weights are determined by learned Query-Key compatibility. This is how context flows between tokens.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Query (<span class="math">Q</span>)</dt>
+          <dd>"What am I looking for?" — a learned linear projection of each token, used to probe other tokens for relevant information.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Key (<span class="math">K</span>)</dt>
+          <dd>"What do I contain?" — a learned linear projection that advertises each token's content. Dot-producted with queries to compute attention scores.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Value (<span class="math">V</span>)</dt>
+          <dd>"What information do I give?" — a learned linear projection carrying the actual content to be aggregated. Weighted by attention scores to form the output.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Attention Score</dt>
+          <dd>The dot product <span class="math">Q · Kᵀ / √d_k</span> between a query and key vector. Higher scores mean more "attention" — that token's value will have more influence.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Causal Mask</dt>
+          <dd>A triangular mask that sets attention scores for future positions to −∞. Ensures each token can only attend to itself and previous tokens. This is what makes the model autoregressive.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Multi-Head Attention</dt>
+          <dd>Running <span class="math">h</span> parallel attention operations, each with its own Q/K/V projections over a sub-dimension. Allows the model to attend to different aspects simultaneously.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt><span class="math">W^O</span> (Output Projection)</dt>
+          <dd>A matrix of shape <span class="math">d_model × d_model</span> applied after concatenating all head outputs, mixing information across heads.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Scaled Dot-Product</dt>
+          <dd>Division by <span class="math">√d_k</span> before softmax. Without scaling, large dimension dot products produce extreme values that push softmax into saturation (near-zero gradients).</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Feed-Forward Network</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>FFN (Feed-Forward Network)</dt>
+          <dd>A two-layer MLP applied independently to each token position. Expands the dimension (typically 4×), applies a nonlinearity, then projects back. Stores much of the model's factual "knowledge".</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>GELU (Gaussian Error Linear Unit)</dt>
+          <dd>Activation function defined as <span class="math">x · Φ(x)</span>. A smooth version of ReLU that allows small negative values through, improving gradient flow. Standard in GPT-family models.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>SwiGLU</dt>
+          <dd>A gated FFN variant using three projections: <span class="math">(Swish(xW_gate) ⊙ xW_up) W_down</span>. The gate controls information flow. Used by LLaMA, PaLM, and most modern models.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Swish / SiLU</dt>
+          <dd>Activation function <span class="math">x · σ(x)</span> where σ is the sigmoid. Self-gated and smooth. Used inside SwiGLU.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Normalization & Residuals</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>LayerNorm</dt>
+          <dd>Normalizes each token's vector to mean ≈ 0 and variance ≈ 1 across the feature dimension, then applies learned scale (<span class="math">γ</span>) and shift (<span class="math">β</span>). Stabilizes training of deep networks.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>RMSNorm</dt>
+          <dd>Simplified LayerNorm that skips mean-centering and uses the root mean square for normalization. No bias parameter. Slightly faster, works equally well.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Residual Connection</dt>
+          <dd>Adding the input of a sub-layer to its output: <span class="math">x + SubLayer(x)</span>. Creates a "shortcut" for gradients and lets each layer make incremental updates rather than overwriting the representation.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Pre-Norm vs Post-Norm</dt>
+          <dd><strong>Pre-Norm:</strong> <span class="math">x + SubLayer(Norm(x))</span> — normalize before the sub-layer. More stable for deep models. <strong>Post-Norm:</strong> <span class="math">Norm(x + SubLayer(x))</span> — original Transformer style. Harder to train at scale.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Output & Generation</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Logits</dt>
+          <dd>The raw, unnormalized scores output by the final linear layer — one value per vocabulary token. Converted to probabilities via softmax.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Softmax</dt>
+          <dd>Converts a vector of logits into a probability distribution: <span class="math">P(i) = exp(z_i) / Σ_j exp(z_j)</span>. All outputs are in [0, 1] and sum to 1.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Temperature (<span class="math">T</span>)</dt>
+          <dd>A scalar dividing logits before softmax. T &lt; 1 → sharper/more confident distribution. T &gt; 1 → flatter/more random. T = 1 → standard softmax.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Greedy Decoding</dt>
+          <dd>Always selecting the highest-probability token: <span class="math">argmax(P)</span>. Deterministic but repetitive.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Top-k Sampling</dt>
+          <dd>Restricting sampling to the <span class="math">k</span> highest-probability tokens, zeroing out the rest, then renormalizing and sampling. Fixed candidate count.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Top-p / Nucleus Sampling</dt>
+          <dd>Keeping the smallest token set whose cumulative probability ≥ <span class="math">p</span>. Adaptive: keeps fewer tokens when confident, more when uncertain.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>KV Cache</dt>
+          <dd>A memory optimization for autoregressive generation. Stores the Key and Value tensors from all previous tokens so they don't need to be recomputed at each generation step. Trades memory for compute.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Autoregressive</dt>
+          <dd>Generating one token at a time, feeding each new token back as input to predict the next. The causal mask ensures the model never "sees the future".</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="glossary-group">
+      <h3 class="glossary-group-title">Training Concepts</h3>
+      <dl class="glossary-list">
+        <div class="glossary-entry">
+          <dt>Parameters / Weights</dt>
+          <dd>The learned numerical values in the model's matrices (embeddings, Q/K/V projections, FFN layers, LayerNorm scales). Adjusted during training via backpropagation.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Backpropagation</dt>
+          <dd>The algorithm that computes gradients of the loss with respect to every parameter by propagating error backwards through the network. Used with an optimizer (e.g. Adam) to update weights.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Cross-Entropy Loss</dt>
+          <dd>The training objective: <span class="math">−log P(correct_token)</span> averaged over all positions. Minimizing this makes the model assign higher probability to the right next token.</dd>
+        </div>
+        <div class="glossary-entry">
+          <dt>Perplexity</dt>
+          <dd>Exponential of the average cross-entropy loss: <span class="math">exp(loss)</span>. Intuitively, how many tokens the model is "equally confused between" at each step. Lower is better.</dd>
+        </div>
+      </dl>
+    </div>
+
   </div>
 </section>
 
