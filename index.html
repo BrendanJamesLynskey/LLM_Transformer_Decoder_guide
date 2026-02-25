@@ -795,6 +795,15 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     x_i = W_E[token_id_i] &nbsp;&nbsp; → &nbsp;&nbsp; shape: <span class="dim">d_model</span>
   </div>
 
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x_i</span> — the resulting embedding vector for the i-th token in the sequence<br>
+    <span class="math">W_E</span> — the embedding weight matrix of shape <span class="math">V × d_model</span> (learned during training)<br>
+    <span class="math">token_id_i</span> — the integer ID of the i-th token, used as a row index into <span class="math">W_E</span><br>
+    <span class="math">[ ]</span> — table lookup (indexing): select the row at that index, no multiplication needed<br>
+    <span class="math">d_model</span> — the dimensionality of each embedding vector (e.g. 768)
+  </div>
+
   <p>For a sequence of <span class="math">n</span> tokens, we stack these into a matrix <span class="math">X ∈ ℝ^(n×d)</span>. Each row is a token's embedding vector.</p>
 
   <div class="diagram-box" data-label="Embedding Lookup">
@@ -864,11 +873,30 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   <p>A second learned embedding table <span class="math">W_P ∈ ℝ^(n_max × d)</span> maps each position index to a vector. The position embedding is simply <strong>added</strong> element-wise to the token embedding:</p>
   <div class="equation">h⁰_i = W_E[token_i] + W_P[i]</div>
 
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">h⁰_i</span> — the initial hidden state for position <span class="math">i</span> (superscript 0 = input to layer 0)<br>
+    <span class="math">W_E[token_i]</span> — the token embedding vector looked up from the embedding table<br>
+    <span class="math">W_P[i]</span> — the positional embedding vector for position <span class="math">i</span>, looked up from a second learned table of shape <span class="math">n_max × d_model</span><br>
+    <span class="math">+</span> — element-wise addition: the token meaning and position information are combined into a single vector
+  </div>
+
   <h3>Rotary Position Embeddings (RoPE — LLaMA style)</h3>
   <p>RoPE doesn't add to embeddings. Instead, it <strong>rotates</strong> query and key vectors in attention by an angle proportional to their position. For a pair of dimensions (2j, 2j+1) at position <em>m</em>:</p>
   <div class="equation">
     RoPE(x, m)_{2j} = x_{2j} cos(mθ_j) − x_{2j+1} sin(mθ_j)<br>
     RoPE(x, m)_{2j+1} = x_{2j} sin(mθ_j) + x_{2j+1} cos(mθ_j)
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x</span> — a query or key vector to be position-encoded<br>
+    <span class="math">m</span> — the absolute position index of this token in the sequence (0, 1, 2, …)<br>
+    <span class="math">j</span> — the dimension pair index: dimensions are processed in pairs (2j, 2j+1)<br>
+    <span class="math">x_{2j}, x_{2j+1}</span> — the two scalar values from dimension pair <span class="math">j</span><br>
+    <span class="math">θ_j</span> — the rotation frequency for pair <span class="math">j</span>: <span class="math">θ_j = 10000^(−2j/d)</span> — higher dimensions rotate slower<br>
+    <span class="math">mθ_j</span> — the rotation angle: position × frequency. Further-apart positions get larger angle differences<br>
+    <span class="math">cos, sin</span> — the rotation is a standard 2D rotation matrix applied to each dimension pair
   </div>
   <p>where <span class="math">θ_j = 10000^(−2j/d)</span>. This encodes <em>relative</em> positions: the dot product between two RoPE-rotated vectors depends only on their <em>distance</em>, not absolute positions.</p>
 
@@ -895,6 +923,17 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     <span style="font-size: 0.8em; color: #8887a0;">each of shape [n × d_k]</span>
   </div>
 
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">X</span> — the input matrix of shape <span class="math">n × d_model</span> (all token hidden states stacked as rows)<br>
+    <span class="math">W^Q_i, W^K_i, W^V_i</span> — learned weight matrices for head <span class="math">i</span>, each of shape <span class="math">d_model × d_k</span><br>
+    <span class="math">Q_i</span> — Query matrix for head <span class="math">i</span>: "what is each token looking for?"<br>
+    <span class="math">K_i</span> — Key matrix for head <span class="math">i</span>: "what does each token advertise?"<br>
+    <span class="math">V_i</span> — Value matrix for head <span class="math">i</span>: "what content does each token carry?"<br>
+    <span class="math">·</span> — matrix multiplication: each token's <span class="math">d_model</span>-dim vector is projected down to <span class="math">d_k</span> dimensions<br>
+    <span class="math">d_k</span> — head dimension = <span class="math">d_model / h</span> (e.g. 768/12 = 64)
+  </div>
+
   <div class="callout info">
     <strong>Q, K, V intuition:</strong> Think of it like a search engine. The <strong>Query</strong> is "what am I looking for?", the <strong>Key</strong> is "what do I contain?", and the <strong>Value</strong> is "what information do I give if selected?" Attention scores are Q·K similarity; the output is a weighted sum of V.
   </div>
@@ -903,6 +942,15 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   <p>The raw attention scores are the dot product of queries and keys, scaled by <span class="math">√d_k</span> to prevent the softmax from saturating for large dimensions:</p>
   <div class="equation">
     scores = (Q · Kᵀ) / √d_k &nbsp;&nbsp;&nbsp; shape: <span class="dim">n × n</span>
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">Q</span> — Query matrix of shape <span class="math">n × d_k</span> (one row per token)<br>
+    <span class="math">Kᵀ</span> — Key matrix transposed to shape <span class="math">d_k × n</span> (the ᵀ means transpose: swap rows and columns)<br>
+    <span class="math">Q · Kᵀ</span> — matrix multiply producing an <span class="math">n × n</span> matrix where entry (i, j) is the dot product of query_i and key_j<br>
+    <span class="math">√d_k</span> — square root of the head dimension (e.g. √64 = 8), used to scale down the dot products<br>
+    <span class="math">/</span> — element-wise division: every score is divided by <span class="math">√d_k</span> to prevent softmax saturation
   </div>
 
   <h3>Step 3: Apply the Causal Mask</h3>
@@ -936,10 +984,27 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     head_i = softmax(mask(Q_i · K_iᵀ / √d_k)) · V_i &nbsp;&nbsp;&nbsp; shape: <span class="dim">n × d_k</span>
   </div>
 
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">head_i</span> — the output of attention head <span class="math">i</span>, shape <span class="math">n × d_k</span><br>
+    <span class="math">Q_i · K_iᵀ / √d_k</span> — scaled attention scores (see above)<br>
+    <span class="math">mask()</span> — applies the causal mask: sets future positions (j > i) to <span class="math">−∞</span><br>
+    <span class="math">softmax()</span> — converts each row of scores into a probability distribution (sums to 1), with −∞ entries becoming 0<br>
+    <span class="math">· V_i</span> — matrix multiply with Values: each token's output is a weighted average of all value vectors, weighted by attention probabilities
+  </div>
+
   <h3>Step 5: Concatenate Heads & Project</h3>
   <p>All <span class="math">h</span> heads are concatenated along the last dimension and multiplied by an output projection matrix <span class="math">W^O ∈ ℝ^(d_model × d_model)</span>:</p>
   <div class="equation">
     MultiHead(X) = Concat(head_1, ..., head_h) · W^O
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">head_1, ..., head_h</span> — outputs from all <span class="math">h</span> attention heads, each of shape <span class="math">n × d_k</span><br>
+    <span class="math">Concat()</span> — concatenate along the last dimension: <span class="math">h</span> heads of <span class="math">d_k</span> → one tensor of <span class="math">d_model</span> (since <span class="math">h × d_k = d_model</span>)<br>
+    <span class="math">W^O</span> — output projection matrix of shape <span class="math">d_model × d_model</span> (learned), mixes information across heads<br>
+    <span class="math">·</span> — matrix multiplication: final output has shape <span class="math">n × d_model</span>, same as the input
   </div>
 
   <div class="diagram-box" data-label="Multi-Head Attention — Full Flow">
@@ -1013,12 +1078,34 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   <div class="equation">
     FFN(x) = GELU(x · W_1 + b_1) · W_2 + b_2
   </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x</span> — the input vector for a single token, shape <span class="math">d_model</span><br>
+    <span class="math">W_1</span> — first weight matrix, shape <span class="math">d × 4d</span> (expands the dimension by 4×)<br>
+    <span class="math">b_1</span> — first bias vector, shape <span class="math">4d</span> (added after the first projection)<br>
+    <span class="math">GELU()</span> — activation function applied element-wise: <span class="math">GELU(z) = z · Φ(z)</span> where Φ is the standard normal CDF<br>
+    <span class="math">W_2</span> — second weight matrix, shape <span class="math">4d × d</span> (projects back down to model dimension)<br>
+    <span class="math">b_2</span> — second bias vector, shape <span class="math">d</span><br>
+    <span class="math">·</span> — matrix multiplication (not element-wise)
+  </div>
   <p>Where <span class="math">W_1 ∈ ℝ^(d × 4d)</span> expands the dimension by 4×, and <span class="math">W_2 ∈ ℝ^(4d × d)</span> projects back down. The inner dimension <span class="math">4d</span> is called the <strong>intermediate size</strong>.</p>
 
   <h3>SwiGLU FFN (LLaMA, modern models)</h3>
   <p>Modern models use a gated variant called SwiGLU, which uses three weight matrices:</p>
   <div class="equation">
     FFN_SwiGLU(x) = (Swish(x · W_gate) ⊙ (x · W_up)) · W_down
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x</span> — the input vector for a single token, shape <span class="math">d_model</span><br>
+    <span class="math">W_gate</span> — gating weight matrix, shape <span class="math">d × d_ff</span> (produces the gate signal)<br>
+    <span class="math">W_up</span> — up-projection weight matrix, shape <span class="math">d × d_ff</span> (produces the value signal)<br>
+    <span class="math">W_down</span> — down-projection weight matrix, shape <span class="math">d_ff × d</span> (projects back to model dimension)<br>
+    <span class="math">Swish(z)</span> — activation function: <span class="math">z · σ(z)</span> where <span class="math">σ</span> is the sigmoid function <span class="math">1/(1 + e^(−z))</span><br>
+    <span class="math">⊙</span> — element-wise (Hadamard) multiplication: the gate output controls how much of the up-projection passes through<br>
+    <span class="math">·</span> — matrix multiplication
   </div>
   <p>where <span class="math">⊙</span> is element-wise multiplication. The gate controls information flow, improving training stability and performance. The Swish activation is <span class="math">Swish(x) = x · σ(x)</span>.</p>
 
@@ -1126,6 +1213,18 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   <div class="equation">
     RMSNorm(x) = γ ⊙ (x / √(mean(x²) + ε))
   </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x</span> — the input vector (one token's hidden state, dimension <span class="math">d_model</span>)<br>
+    <span class="math">x²</span> — each element squared (element-wise)<br>
+    <span class="math">mean(x²)</span> — the average of all squared elements: <span class="math">(1/d) Σ xᵢ²</span> (the root-mean-square statistic, without mean-centering)<br>
+    <span class="math">ε</span> (epsilon) — small stability constant (e.g. 10⁻⁵) to prevent division by zero<br>
+    <span class="math">√</span> — square root of the denominator<br>
+    <span class="math">γ</span> (gamma) — learned per-dimension scale vector of size <span class="math">d</span>, initialized to ones<br>
+    <span class="math">⊙</span> — element-wise multiplication: each dimension is scaled by its own <span class="math">γ</span> value<br>
+    Note: unlike LayerNorm, RMSNorm has <strong>no β (bias)</strong> and <strong>no mean subtraction</strong> — just scale
+  </div>
   <p>This is simpler (no bias β, no mean subtraction) and empirically works just as well, with less compute.</p>
 
   <h3>Residual Connections</h3>
@@ -1133,6 +1232,16 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
   <div class="equation">
     output = LayerNorm(x + SubLayer(x)) &nbsp;&nbsp;&nbsp; <span style="color: #8887a0;">(Post-Norm)</span><br>
     output = x + SubLayer(LayerNorm(x)) &nbsp;&nbsp;&nbsp; <span style="color: #8887a0;">(Pre-Norm, more common)</span>
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">x</span> — the input to the sub-layer (a token's hidden state vector)<br>
+    <span class="math">SubLayer()</span> — either the attention block or the FFN block<br>
+    <span class="math">x + SubLayer(x)</span> — the residual connection: the sub-layer's output is <em>added</em> to its own input, creating a skip connection<br>
+    <span class="math">LayerNorm()</span> — layer normalization (see above)<br>
+    <strong>Post-Norm:</strong> normalize <em>after</em> adding the residual — the original Transformer design<br>
+    <strong>Pre-Norm:</strong> normalize <em>before</em> the sub-layer, then add the residual — more stable for very deep models, used by GPT-2+, LLaMA, etc.
   </div>
 
   <div class="callout">
@@ -1153,12 +1262,30 @@ footer a { color: var(--accent-cyan); text-decoration: none; }
     logits = h_last · W_Eᵀ &nbsp;&nbsp;&nbsp; shape: <span class="dim">V</span>
   </div>
 
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">h_last</span> — the hidden state of the last token in the sequence after all N decoder layers, shape <span class="math">d_model</span><br>
+    <span class="math">W_E</span> — the token embedding matrix of shape <span class="math">V × d_model</span> (the same one used to embed input tokens, when weights are tied)<br>
+    <span class="math">W_Eᵀ</span> — <span class="math">W_E</span> transposed to shape <span class="math">d_model × V</span> (the ᵀ means transpose: swap rows and columns)<br>
+    <span class="math">·</span> — matrix multiplication: the dot product of the hidden state with each token's embedding produces one score per vocabulary entry<br>
+    <span class="math">logits</span> — the resulting vector of size <span class="math">V</span>, with one raw unnormalized score per token in the vocabulary
+  </div>
+
   <p>Each logit value represents the model's raw (unnormalized) score for how likely each token in the vocabulary is to come next.</p>
 
   <h3>Temperature-Scaled Softmax</h3>
   <p>To convert logits to probabilities, we apply softmax with a <strong>temperature</strong> parameter <span class="math">T</span>:</p>
   <div class="equation">
     P(token_i) = exp(logit_i / T) / Σ_j exp(logit_j / T)
+  </div>
+
+  <div class="callout math">
+    <strong>Symbol breakdown:</strong><br>
+    <span class="math">P(token_i)</span> — the predicted probability of token <span class="math">i</span> being the next token (between 0 and 1, all probabilities sum to 1)<br>
+    <span class="math">logit_i</span> — the raw score for token <span class="math">i</span> from the output projection (can be any real number)<br>
+    <span class="math">T</span> — temperature: a positive scalar that controls distribution sharpness (T=1 is standard, T&lt;1 sharper, T&gt;1 flatter)<br>
+    <span class="math">exp()</span> — the exponential function <span class="math">e^(…)</span>, which maps any real number to a positive value<br>
+    <span class="math">Σ_j</span> — summation over all <span class="math">V</span> tokens in the vocabulary (the normalizing denominator that ensures probabilities sum to 1)
   </div>
 
   <div class="interactive-panel">
